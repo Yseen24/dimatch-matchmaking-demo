@@ -1,0 +1,10 @@
+{
+  "runs": [
+    {"label":"Waiting request", "date":"16 Nov", "input":[642,716,848],"output":[21,26,1]},
+    {"label":"5v5 proposal", "date":"12 Nov", "input":[312,564,614,656,833,983],"output":[11,18,16,14,64,152]}
+  ],
+  "rates":{"input":0.40,"cached":0.10,"output":1.60},
+  "volumes":[50,500,5000],
+  "infrastructure":[45,90,450],
+  "organizer":3,"admin":0.5,"messaging":0.02,"payment":0.30,"requestsPerMatch":10,"price":1.5,"players":10
+}
