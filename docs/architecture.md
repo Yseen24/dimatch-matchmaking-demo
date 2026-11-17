@@ -5,7 +5,7 @@
 1. The browser sends the current request, recent conversation and selected slot. On Vercel the request goes to the same-origin function in `api/chat.js`.
 2. The function passes its short-lived Vercel identity to the DIMATCH Supabase Edge Function. Supabase verifies the issuer, audience, team and production project. The original host continues to authenticate with a signed, short-lived ticket bound to the request body and origin.
 3. OpenAI GPT-4.1 mini interprets the message and selects an action such as organizing a match, checking a roster or searching for a player's game. The agent discovers the MCP tools and runs the checks required for that action. Every candidate pitch must satisfy the requested constraints.
-4. If a pitch changes, the agent checks the new slot, organizer and each player's availability for the whole hour. Ten eligible players are required to save the 5v5 proposal. The server gives OpenAI the observed results to explain.
+4. If a pitch changes, the agent checks the new slot, organizer and each player's availability for the whole hour. Ten eligible players are required to save the 5v5 proposal. For a saved proposal in English, French, Arabic or Darija, the server formats the approval summary directly from verified roster values. Other responses can use a second model call. An explicit time window for replacements constrains candidate slots after the requested time has been checked.
 5. The UI shows the actual arguments, results and model-reported token usage. A human click releases simulated invitations in the browser tab. An invitation and a player acceptance are separate events.
 
 ## Data and cost boundaries
