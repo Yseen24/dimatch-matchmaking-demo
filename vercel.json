@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/vercel-build.mjs",
+  "outputDirectory": "public",
+  "functions": {"api/chat.js": {"maxDuration": 100}},
+  "rewrites": [
+    {"source": "/mcp", "destination": "/api/mcp?channel=external"},
+    {"source": "/stage/mcp", "destination": "/api/mcp?channel=stage"},
+    {"source": "/offline", "destination": "/offline.html"}
+  ],
+  "headers": [
+    {"source": "/offline", "headers": [{"key": "Content-Disposition", "value": "attachment; filename=\"DIMATCH_Matchmaking_Demo.html\""}]},
+    {"source": "/", "headers": [{"key": "Cache-Control", "value": "no-store"}]}
+  ]
+}

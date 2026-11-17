@@ -1,0 +1,11 @@
+{
+  "name": "dimatch-matchmaking-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "validate": "node scripts/validate-artifact.mjs",
+    "dev": "node scripts/preview.mjs",
+    "test": "node --test scripts/summit.test.mjs"
+  }
+}

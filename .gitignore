@@ -1,0 +1,7 @@
+dist/
+site.tar.gz
+
+public/
+.vercel/
+.env*
+worker/demo-source.zip
