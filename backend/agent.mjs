@@ -8,14 +8,28 @@ function action(name,description,properties,required=Object.keys(properties)){
 }
 const actions=[
   action("organize_match","Choose when asked to organize, find a replacement for, or recheck a group match with changed constraints. This checks and drafts any feasible proposal.",{
+    reply_locale:{type:"string",enum:["en","fr","ar","ary","other"],description:"Language of the reply: English, French, Arabic, Moroccan Darija, or other."},
     field:string("Requested venue, e.g. Oasis or Atlantic."),start:integer("Requested whole clock hour: 22:00 is 22."),date:string("YYYY-MM-DD. The default organizer fixture date is 2026-11-19."),format:string("5v5 unless the user specifies another format."),
-    alternate_time:flag("True if the user allows another time. An unrestricted request to find an alternative permits both venue and time changes. If kickoff is fixed this must be false."),
-    alternate_field:flag("True when another venue is allowed. A fixed venue forbids changing it."),earliest:integer("0 unless the user explicitly specifies the earliest permitted ALTERNATIVE kickoff. A requested initial hour is never the lower bound."),latest:integer("23 unless the user explicitly specifies the latest permitted ALTERNATIVE kickoff. A requested initial hour is never the upper bound."),simulate_timeout:flag("True only if explicitly requested.")
+    alternate_time:flag("True when another kickoff is permitted, including an earlier-only or later-only alternative. False when the kickoff is fixed."),
+    alternate_field:flag("True when another venue is allowed. A fixed venue forbids changing it."),earliest:integer("Inclusive lower bound for REPLACEMENTS only. Default 0. For earlier than 22:00 use 0 unless another lower bound was stated."),latest:integer("Inclusive upper bound for REPLACEMENTS only. Default 23. For earlier than 22:00 use 21. The preferred kickoff is checked independently."),simulate_timeout:flag("True only if explicitly requested.")
   }),
   action("inspect_roster","Choose for who can stay, who has to leave, exclusions, why a player cannot stay, or an availability breakdown. For a follow-up use the current proposal.",{reference:{type:"string",enum:["current_proposal","specific_hour"]},start:integer("Clock hour for a specific-hour question; use the current displayed kickoff for an implicit follow-up.")}),
   action("search_player_matches","Choose when an individual player seeks an existing open or forming game.",{date:string("YYYY-MM-DD"),zone:string("Casablanca zone"),start:integer("Earliest available clock hour"),end:integer("Latest available clock hour",24),format:{type:"string",enum:["5v5","7v7","flexible"]}}),
   action("conversation_reply","Choose for general explanation, missing necessary information, or a request for a human-only action. Do not choose this for actionable scheduling or roster requests.",{answer:string("Concise response. Never assert fresh availability without tools.")})
 ];
+// Use verified tool values for the on-screen approval summary.
+function proposalSummary(locale,proposal,roster){
+  const count=roster.eligible_player_ids.length;
+  const excluded=roster.excluded.map(player=>player.id).join(", ") || "—";
+  const slot=proposal.field+" · "+roster.start+":00–"+roster.end+":00 · "+proposal.format;
+  const summaries={
+    en:`${count} players can stay for the full hour. Unavailable (${roster.excluded.length}): ${excluded}. The organizer is available. The proposal awaits your approval.`,
+    fr:`${count} joueurs sont disponibles pendant toute l’heure. Indisponibles (${roster.excluded.length}) : ${excluded}. L’organisateur est disponible. La proposition attend votre validation.`,
+    ar:`يمكن لـ ${count} لاعبين البقاء طوال الساعة. غير المتاحين (${roster.excluded.length}): ${excluded}. المنظم متاح والمقترح بانتظار موافقتك.`,
+    ary:`كاينين ${count} لعابة يقدرو يبقاو الساعة كاملة. اللي ما متاحينش (${roster.excluded.length}): ${excluded}. المنظّم متاح والماتش كيتسنّى الموافقة ديالك.`
+  };
+  return summaries[locale] ? slot+". "+summaries[locale] : null;
+}
 async function rpc(method,params,id){
   const req=new Request("https://dimatch.internal/stage/mcp",{method:"POST",body:JSON.stringify({jsonrpc:"2.0",id,method,params})});
   const envelope=await (await handleMcp(req)).json();
@@ -61,7 +75,7 @@ export async function runAgent(turn,infer){
     const field=/oasis/i.test(args.field)?"Oasis":/^atlantic$/i.test(args.field)?"Atlantic":args.field;
     const requested={field,start};
     if(date!=="2026-11-19"||format.toLowerCase()!=="5v5")finding="The organizer fixture only covers 5v5 on 19 Nov 2026. This request is outside it.";
-    else if(start<earliest||start>latest||earliest>latest)finding="The requested kickoff is outside the permitted window.";
+    else if(earliest>latest)finding="The alternative kickoff window is invalid.";
     else{
       await tool("get_opportunities",{});
       let first=await tool("check_field",args.simulate_timeout?{...requested,demo_fault:"venue_timeout"}:requested);
@@ -81,6 +95,10 @@ export async function runAgent(turn,infer){
         }else finding="The verified pitch lacks a full eligible roster or an available organizer.";
       }
     }
+  }
+  if(proposal){
+    const answer=proposalSummary(args.reply_locale,proposal,roster);
+    if(answer)return {answer,model:pick.model,usage,trace,slot,roster,proposal};
   }
   const rosterFacts=roster?{
     fullMatchWindow:roster.start+":00–"+roster.end+":00",eligible:roster.eligible_player_ids,
