@@ -67,7 +67,7 @@ test("player searches distinguish open, forming and no compatible match",async()
 test("OpenAI action dispatch rechecks the alternative and cannot draft through a fixed kickoff",async()=>{
   const {runAgent}=await import("../backend/agent.mjs");
   const makeInfer=(name,args)=>async(messages,tools,finish)=>({model:"test",usage:{input:1,output:1},message:finish?{content:"Checked."}:{tool_calls:[{id:"call",type:"function",function:{name,arguments:JSON.stringify(args)}}]}});
-  const args={field:"Oasis",start:22,date:"2026-11-19",format:"5v5",earliest:0,latest:23,alternate_time:true,alternate_field:true,simulate_timeout:true};
+  const args={reply_locale:"en",field:"Oasis",start:22,date:"2026-11-19",format:"5v5",earliest:0,latest:23,alternate_time:true,alternate_field:true,simulate_timeout:true};
   const q={question:"Organize a game.",history:[]};
   const run=await runAgent(q,makeInfer("organize_match",args));
   assert.equal(run.trace[1].failed,true);assert.equal(run.proposal.status,"pending_admin");assert.equal(run.roster.excluded.length,4);
@@ -80,4 +80,39 @@ test("live turn tickets require a configured signer and the same page origin",as
   const mk=(origin)=>new Request("https://demo.example/api/agent-ticket",{method:"POST",headers:{origin,"content-type":"application/json"},body:'{"question":"Who can stay?","history":[]}'});
   assert.equal((await app.fetch(mk("https://another.example"))).status,403);
   assert.equal((await app.fetch(mk("https://demo.example"))).status,503);
+});
+
+test("alternative time limits constrain replacement slots without rejecting the requested kickoff",async()=>{
+  const {runAgent}=await import("../backend/agent.mjs");
+  const run=async(question,start,earliest,latest,alternateTime)=>{
+    const parameters={reply_locale:"en",field:"Oasis",start,date:"2026-11-19",format:"5v5",earliest,latest,
+      alternate_time:alternateTime,alternate_field:false,simulate_timeout:false};
+    const infer=async(messages,tools,finish)=>({model:"test",usage:{input:1,output:1},message:finish
+      ?{content:"Checked."}
+      :{tool_calls:[{id:"call",type:"function",function:{name:"organize_match",arguments:JSON.stringify(parameters)}}]}});
+    return runAgent({question,history:[]},infer);
+  };
+  for(const [question,hour,lower,upper] of [
+    ["An earlier kickoff is allowed.",22,0,21],
+    ["A later kickoff is allowed.",20,21,23],
+    ["If the original slot is taken, try an earlier time.",21,0,20]
+  ]){
+    const result=await run(question,hour,lower,upper,true);
+    assert.equal(result.proposal?.start,21);
+    assert.match(result.answer,/10 players can stay for the full hour/);
+    assert.equal(result.usage.length,1);
+    assert.equal(result.proposal.status,"pending_admin");
+    assert.equal(result.proposal.player_ids.length,10);
+    assert.ok(result.trace.some(row=>row.tool==="check_organizer"));
+    assert.ok(result.trace.some(row=>row.tool==="check_players"&&row.args.start===21));
+  }
+  for(const [question,hour,lower,upper,flexible] of [
+    ["Keep 22:00 fixed.",22,22,22,false],
+    ["Only alternatives before 21:00 are allowed.",22,0,20,true],
+    ["A fixed alternative window was malformed.",22,22,20,true]
+  ]){
+    const result=await run(question,hour,lower,upper,flexible);
+    assert.equal(result.proposal,null);
+    assert.ok(!result.trace.some(row=>row.tool==="save_proposal"));
+  }
 });
